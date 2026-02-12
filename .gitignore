@@ -1,0 +1,5 @@
+CineBox/
+__pycache__/
+*.pyc
+.env
+media.db

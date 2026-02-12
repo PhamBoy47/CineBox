@@ -9,7 +9,7 @@ from models.media_model import Media
 
 
 class DatabaseError(Exception):
-    """Raised when a database operation fails."""
+    pass
 
 
 class DatabaseManager:
@@ -43,7 +43,11 @@ class DatabaseManager:
             runtime_minutes INTEGER,
             imdb_rating REAL,
             poster_path TEXT,
-            last_scanned TEXT
+            last_scanned TEXT,
+            season_number INTEGER,
+            episode_number INTEGER,
+            episode_title TEXT,
+            episode_air_date TEXT
         );
         """
         self._execute(query)
@@ -88,6 +92,10 @@ class DatabaseManager:
             imdb_rating=row["imdb_rating"],
             poster_path=row["poster_path"],
             last_scanned=DatabaseManager._deserialize_datetime(row["last_scanned"]),
+            season_number=row["season_number"],
+            episode_number=row["episode_number"],
+            episode_title=row["episode_title"],
+            episode_air_date=row["episode_air_date"],
         )
 
     def insert_media(self, media: Media) -> None:
@@ -107,9 +115,15 @@ class DatabaseManager:
             runtime_minutes,
             imdb_rating,
             poster_path,
-            last_scanned
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            last_scanned,
+            season_number,
+            episode_number,
+            episode_title,
+            episode_air_date
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
+
         params = (
             media.file_path,
             media.file_name,
@@ -126,64 +140,53 @@ class DatabaseManager:
             media.imdb_rating,
             media.poster_path,
             self._serialize_datetime(media.last_scanned),
+            media.season_number,
+            media.episode_number,
+            media.episode_title,
+            media.episode_air_date,
         )
+
         self._execute(query, params)
 
     def update_media(self, media: Media) -> None:
         query = """
-        UPDATE media
-        SET
-            file_name = ?,
-            file_size_mb = ?,
-            duration_seconds = ?,
-            resolution = ?,
+        UPDATE media SET
             title = ?,
-            category = ?,
             release_date = ?,
             director = ?,
             writers = ?,
             producers = ?,
             runtime_minutes = ?,
             imdb_rating = ?,
-            poster_path = ?,
-            last_scanned = ?
-        WHERE file_path = ?;
+            season_number = ?,
+            episode_number = ?,
+            episode_title = ?,
+            episode_air_date = ?
+        WHERE file_path = ?
         """
+
         params = (
-            media.file_name,
-            media.file_size_mb,
-            media.duration_seconds,
-            media.resolution,
             media.title,
-            media.category,
             media.release_date,
             media.director,
             media.writers,
             media.producers,
             media.runtime_minutes,
             media.imdb_rating,
-            media.poster_path,
-            self._serialize_datetime(media.last_scanned),
+            media.season_number,
+            media.episode_number,
+            media.episode_title,
+            media.episode_air_date,
             media.file_path,
         )
-        self._execute(query, params)
 
-    def get_media_by_category(self, category: str) -> list[Media]:
-        query = "SELECT * FROM media WHERE category = ?;"
-        cursor = self._execute(query, (category,))
-        rows = cursor.fetchall()
-        return [self._row_to_media(row) for row in rows]
+        self._execute(query, params)
 
     def get_media_by_path(self, file_path: str) -> Optional[Media]:
         query = "SELECT * FROM media WHERE file_path = ?;"
         cursor = self._execute(query, (file_path,))
         row = cursor.fetchone()
-        if row is None:
-            return None
-        return self._row_to_media(row)
+        return self._row_to_media(row) if row else None
 
     def close(self) -> None:
-        try:
-            self._connection.close()
-        except sqlite3.Error as exc:
-            raise DatabaseError(f"Failed to close database connection: {exc}") from exc
+        self._connection.close()

@@ -21,6 +21,9 @@ class Media:
     imdb_rating: Optional[float] = None
     poster_path: Optional[str] = None
     last_scanned: Optional[datetime] = None
+    file_modified_time: Optional[float] = None
+    error_message: Optional[str] = None
+    error_location: Optional[str] = None
     season_number: Optional[int] = None
     episode_number: Optional[int] = None
     episode_title: Optional[str] = None

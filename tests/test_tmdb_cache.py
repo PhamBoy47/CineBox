@@ -1,8 +1,15 @@
 # tests/test_tmdb_service_cache.py
 from __future__ import annotations
 
-from services.tmdb_service import TMDBService
+from services.tmdb_service import (
+    TMDBInvalidResponseError,
+    TMDBNetworkError,
+    TMDBRateLimitError,
+    TMDBService,
+)
 
+import pytest
+import requests
 
 def test_tmdb_service_caches_requests(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("TMDB_API_KEY", "dummy")

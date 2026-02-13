@@ -15,10 +15,24 @@ from requests import Response
 
 load_dotenv()
 
+logger = logging.getLogger("cinebox.tmdb")
+logger.setLevel(logging.INFO)
 
 
 class TMDBServiceError(Exception):
-    """Raised when TMDB requests fail."""
+    """Base exception raised when TMDB requests fail."""
+
+
+class TMDBRateLimitError(TMDBServiceError):
+    """Raised when TMDB responds with a rate-limit error."""
+
+
+class TMDBNetworkError(TMDBServiceError):
+    """Raised when a network-level failure occurs during TMDB calls."""
+
+
+class TMDBInvalidResponseError(TMDBServiceError):
+    """Raised when TMDB returns a malformed or unexpected response payload."""
 
 
 class TMDBService:
@@ -526,7 +540,7 @@ class TMDBService:
         params: Optional[dict[str, Any]] = None,
         allow_not_found: bool = False,
     ) -> Optional[dict[str, Any]]:
-
+        """Execute a TMDB GET request and classify request failures with typed exceptions."""
         query = dict(params or {})
         query["api_key"] = self._api_key
 
@@ -536,23 +550,69 @@ class TMDBService:
                 params=query,
                 timeout=self._timeout,
             )
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            logger.exception(
+                "TMDB network failure",
+                extra={"path": path, "params": params, "timeout": self._timeout},
+            )
+            raise TMDBNetworkError(f"TMDB network request failed for {path}: {exc}") from exc
         except requests.RequestException as exc:
-            raise TMDBServiceError(f"TMDB request failed for {path}: {exc}") from exc
+            logger.exception(
+                "TMDB request exception",
+                extra={"path": path, "params": params, "timeout": self._timeout},
+            )
+            raise TMDBNetworkError(f"TMDB request failed for {path}: {exc}") from exc
 
         if response.status_code == 404 and allow_not_found:
+            logger.info("TMDB resource not found", extra={"path": path, "params": params})
             return None
 
+        if response.status_code == 429:
+            logger.error(
+                "TMDB rate limit exceeded",
+                extra={"path": path, "params": params, "status_code": response.status_code},
+            )
+            raise TMDBRateLimitError(f"TMDB rate limit exceeded for {path}")
+
         if not response.ok:
+            logger.error(
+                "TMDB API error",
+                extra={
+                    "path": path,
+                    "params": params,
+                    "status_code": response.status_code,
+                    "response_excerpt": response.text[:300],
+                },
+            )
             raise TMDBServiceError(
                 f"TMDB request failed for {path}: {response.status_code} {response.text}"
             )
 
         try:
-            return response.json()
+            payload = response.json()
         except ValueError as exc:
-            raise TMDBServiceError(
+            logger.error(
+                "TMDB returned invalid JSON",
+                extra={"path": path, "params": params, "status_code": response.status_code},
+            )
+            raise TMDBInvalidResponseError(
                 f"Invalid JSON response from TMDB for {path}"
             ) from exc
+
+        if not isinstance(payload, dict):
+            logger.error(
+                "TMDB returned unexpected payload type",
+                extra={
+                    "path": path,
+                    "params": params,
+                    "payload_type": type(payload).__name__,
+                },
+            )
+            raise TMDBInvalidResponseError(
+                f"Unexpected TMDB response type for {path}: {type(payload).__name__}"
+            )
+
+        return payload
 
 
     @staticmethod

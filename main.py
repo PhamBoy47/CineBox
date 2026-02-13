@@ -13,6 +13,7 @@ from core.enricher import MediaEnricher
 from core.error_utils import get_exception_location
 from core.scanner import MediaScanner
 from models.media_model import Media
+from core.display_formatter import DisplayFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,8 @@ def _process_and_upsert_media(
             else:
                 db.insert_media(media)
 
-            print(f"{action}: {media.title or media.file_name}")
+            display_name = DisplayFormatter.format(media)
+            print(f"{action}: {display_name}")
         except Exception as exc:
             _handle_media_processing_error(db, scanned, exc)
 
@@ -181,6 +183,7 @@ def main():
     scanner = MediaScanner()
     enricher = MediaEnricher()
     db = DatabaseManager()
+
     try:
         media_files = scanner.scan_folders(scan_paths)
         scan_timestamp = datetime.now(timezone.utc)

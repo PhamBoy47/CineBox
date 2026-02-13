@@ -20,6 +20,7 @@ class DatabaseManager:
         self._db_path = db_path
         self._connection = self._create_connection()
         self._create_media_table()
+        self._create_tmdb_cache_tables()
         self._ensure_media_table_columns()
 
     def _create_connection(self) -> Connection:
@@ -99,6 +100,57 @@ class DatabaseManager:
                 WHERE file_modified_time IS NULL AND last_modified IS NOT NULL;
                 """
             )
+
+    def _create_tmdb_cache_tables(self) -> None:
+        """Create persistent TMDB cache tables used by the enrichment service."""
+        self._execute(
+            """
+            CREATE TABLE IF NOT EXISTS tmdb_movie_search (
+                query_key TEXT PRIMARY KEY,
+                response_json TEXT NOT NULL,
+                cached_at TEXT NOT NULL
+            );
+            """
+        )
+        self._execute(
+            """
+            CREATE TABLE IF NOT EXISTS tmdb_tv_search (
+                query_key TEXT PRIMARY KEY,
+                response_json TEXT NOT NULL,
+                cached_at TEXT NOT NULL
+            );
+            """
+        )
+        self._execute(
+            """
+            CREATE TABLE IF NOT EXISTS tmdb_movie_details (
+                movie_id INTEGER PRIMARY KEY,
+                response_json TEXT NOT NULL,
+                cached_at TEXT NOT NULL
+            );
+            """
+        )
+        self._execute(
+            """
+            CREATE TABLE IF NOT EXISTS tmdb_tv_details (
+                tv_id INTEGER PRIMARY KEY,
+                response_json TEXT NOT NULL,
+                cached_at TEXT NOT NULL
+            );
+            """
+        )
+        self._execute(
+            """
+            CREATE TABLE IF NOT EXISTS tmdb_episode_details (
+                tv_id INTEGER NOT NULL,
+                season_number INTEGER NOT NULL,
+                episode_number INTEGER NOT NULL,
+                response_json TEXT NOT NULL,
+                cached_at TEXT NOT NULL,
+                PRIMARY KEY (tv_id, season_number, episode_number)
+            );
+            """
+        )
 
     def _get_media_columns(self) -> set[str]:
         cursor = self._execute("PRAGMA table_info(media);")

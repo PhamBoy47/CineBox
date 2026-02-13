@@ -35,11 +35,25 @@ class MediaEnricher:
                     return media
 
                 # Extract season & episode
-                season, episode = self._extract_season_episode(media.file_name)
+                season, episode = self._extract_season_episode(media)
 
                 # Get show-level details
                 show_details = self.tmdb_service.get_tv_details(tv_id)
                 if not show_details:
+                    return media
+                
+                season, episode = self._extract_season_episode(media)
+
+                if season is None or episode is None:
+                    return media
+
+                # 🔹 Validate season against TMDB
+                payload = self.tmdb_service._request(f"/tv/{tv_id}", {})
+                available_seasons = payload.get("number_of_seasons", 0)
+
+                if season > available_seasons:
+                    print(f"[WARNING] Season {season} not available in TMDB for {media.file_name}")
+                    media.category = "unmatched"
                     return media
 
                 # Apply show-level metadata
@@ -113,13 +127,13 @@ class MediaEnricher:
 
         return media.file_name
     @staticmethod
-    def _extract_season_episode(filename: str) -> tuple[Optional[int], Optional[int]]:
-        # Match S01E01
-        match = re.search(r"S(\d{1,2})E(\d{1,2})", filename, re.IGNORECASE)
+    def _extract_season_episode(media: Media) -> tuple[Optional[int], Optional[int]]:
+        filename = media.file_name  # 🔹 extract string first
+
+        match = re.search(r"S(\d{1,2})[.\-_ ]?E(\d{1,2})", filename, re.IGNORECASE)
         if match:
             return int(match.group(1)), int(match.group(2))
 
-        # Match 1x06
         match = re.search(r"(\d{1,2})x(\d{1,2})", filename, re.IGNORECASE)
         if match:
             return int(match.group(1)), int(match.group(2))

@@ -4,7 +4,6 @@ import os
 import re
 import json
 import sqlite3
-import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 from dotenv import load_dotenv

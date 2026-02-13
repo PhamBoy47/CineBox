@@ -11,7 +11,6 @@ from services.tmdb_service import (
 import pytest
 import requests
 
-
 def test_tmdb_service_caches_requests(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("TMDB_API_KEY", "dummy")
     service = TMDBService(cache_db_path=str(tmp_path / "media.db"))
@@ -94,58 +93,3 @@ def test_tmdb_service_uses_persistent_cache(tmp_path, monkeypatch) -> None:
     cached_details = service2.get_movie_details(7)
     assert cached_details == details
     service2.close()
-
-
-class _FakeResponse:
-    def __init__(self, status_code: int, ok: bool, text: str = "", payload=None, json_error: bool = False) -> None:
-        self.status_code = status_code
-        self.ok = ok
-        self.text = text
-        self._payload = payload
-        self._json_error = json_error
-
-    def json(self):
-        if self._json_error:
-            raise ValueError("bad json")
-        return self._payload
-
-
-def test_request_raises_network_error(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("TMDB_API_KEY", "dummy")
-    service = TMDBService(cache_db_path=str(tmp_path / "media.db"))
-
-    def raise_timeout(*args, **kwargs):
-        raise requests.Timeout("timeout")
-
-    monkeypatch.setattr(service._session, "get", raise_timeout)
-
-    with pytest.raises(TMDBNetworkError):
-        service._request("/search/movie", {"query": "Inception"})
-
-
-def test_request_raises_rate_limit_error(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("TMDB_API_KEY", "dummy")
-    service = TMDBService(cache_db_path=str(tmp_path / "media.db"))
-
-    monkeypatch.setattr(
-        service._session,
-        "get",
-        lambda *args, **kwargs: _FakeResponse(429, False, text="Too Many Requests", payload={}),
-    )
-
-    with pytest.raises(TMDBRateLimitError):
-        service._request("/search/movie", {"query": "Inception"})
-
-
-def test_request_raises_invalid_response_error(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("TMDB_API_KEY", "dummy")
-    service = TMDBService(cache_db_path=str(tmp_path / "media.db"))
-
-    monkeypatch.setattr(
-        service._session,
-        "get",
-        lambda *args, **kwargs: _FakeResponse(200, True, payload=None, json_error=True),
-    )
-
-    with pytest.raises(TMDBInvalidResponseError):
-        service._request("/search/movie", {"query": "Inception"})

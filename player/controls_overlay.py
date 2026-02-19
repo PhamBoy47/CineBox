@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from PyQt6.QtCore import QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRectF, QSize, Qt, QTimer, pyqtProperty, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPaintEvent, QPixmap, QPolygonF
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPaintEvent, QPixmap, QPolygonF
 from PyQt6.QtWidgets import QLabel, QPushButton, QWidget
 
 try:
@@ -204,7 +204,7 @@ class ControlsOverlay(QWidget):
 
     def _apply_button_icon(self, button: QPushButton, icon_path: Path | None, fallback_text: str) -> None:
         if icon_path is not None and icon_path.exists():
-            icon = self._tinted_icon_from_path(icon_path, ACTION_ICON_SIZE, QColor(CREAM_RGB[0], CREAM_RGB[1], CREAM_RGB[2]))
+            icon = self._icon_without_dark_background(icon_path, ACTION_ICON_SIZE)
             if not icon.isNull():
                 button.setIcon(icon)
                 button.setIconSize(ACTION_ICON_SIZE)
@@ -215,7 +215,11 @@ class ControlsOverlay(QWidget):
         button.setText(fallback_text)
         button.setProperty("icon_only", not bool(button.text().strip()))
 
-    def _tinted_icon_from_path(self, icon_path: Path, size: QSize, tint: QColor) -> QIcon:
+    def _icon_without_dark_background(self, icon_path: Path, size: QSize) -> QIcon:
+        """
+        Drop dark background pixels from icon assets (e.g. black square layer)
+        while preserving the visible symbol colors.
+        """
         source_icon = QIcon(str(icon_path))
         if source_icon.isNull():
             return QIcon()
@@ -224,15 +228,21 @@ class ControlsOverlay(QWidget):
         if source.isNull():
             return QIcon()
 
-        tinted = QPixmap(size)
-        tinted.fill(Qt.GlobalColor.transparent)
+        image = source.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        dark_threshold = 40  # treat near-black pixels as background
 
-        painter = QPainter(tinted)
-        painter.fillRect(tinted.rect(), tint)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
-        painter.drawPixmap(0, 0, source)
-        painter.end()
-        return QIcon(tinted)
+        for y in range(image.height()):
+            for x in range(image.width()):
+                pixel = image.pixelColor(x, y)
+                if pixel.alpha() == 0:
+                    continue
+                luminance = (pixel.red() * 299 + pixel.green() * 587 + pixel.blue() * 114) // 1000
+                if luminance <= dark_threshold:
+                    pixel.setAlpha(0)
+                    image.setPixelColor(x, y, pixel)
+
+        cleaned = QPixmap.fromImage(image)
+        return QIcon(cleaned)
 
     def _setup_animation(self) -> None:
         self._fade_anim = QPropertyAnimation(self, b"overlayOpacity", self)
